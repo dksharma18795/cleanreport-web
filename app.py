@@ -1,9 +1,23 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
 import io
 import re
 import difflib
 import docx
+# Google Analytics Tracker
+ga_code = """
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-VEH0V9QEEV"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'G-VEH0V9QEEV');
+</script>
+"""
+components.html(ga_code, height=0, width=0)
 
 # --- CORE MATCHING ENGINE ---
 def get_pure_core(name):
