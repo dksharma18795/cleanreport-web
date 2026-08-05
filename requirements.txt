@@ -3,3 +3,4 @@ pandas
 openpyxl
 xlrd
 python-docx
+starlette==0.37.2
