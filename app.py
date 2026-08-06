@@ -1,10 +1,14 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
 import io
 import re
 import difflib
 import docx
-# --- CORE MATCHING ENGINE ---
+
+# ==========================================
+# --- CORE MATCHING ENGINE (YOUR ORIGINAL LOGIC) ---
+# ==========================================
 def get_pure_core(name):
     if not isinstance(name, str) or str(name).lower() == 'nan': return ""
     n = name.upper()
@@ -37,7 +41,6 @@ def standardize_company(raw_name, master_standards, master_core_dict, master_cor
 def extract_text_from_file(uploaded_file):
     text = ""
     try:
-        # Explicitly support .xls files
         if uploaded_file.name.endswith(('.xlsx', '.xls')):
             engine = 'calamine' if uploaded_file.name.endswith('.xls') else 'openpyxl'
             df = pd.read_excel(uploaded_file, header=None, engine=engine)
@@ -55,34 +58,73 @@ def read_master_file(uploaded_file):
     engine = 'calamine' if uploaded_file.name.endswith('.xls') else 'openpyxl'
     return pd.read_excel(uploaded_file, engine=engine)
 
-# --- WEB APP UI ---
-st.set_page_config(page_title="Ultimate Data Matcher", layout="wide")
-st.title("⚡ Ultimate Excel Data Matcher")
-st.write("Upload Master Files (.xls or .xlsx) and provide Target Companies via File OR Paste them directly.")
 
-# 1. Master Files Upload
-col1, col2 = st.columns(2)
-with col1:
-    sales_file = st.file_uploader("1. Upload Sales File (GC SALE)", type=["xlsx", "xls"])
-with col2:
-    stock_file = st.file_uploader("2. Upload Stock File (MSTC)", type=["xlsx", "xls"])
+# ==========================================
+# --- WEB APP UI SETUP (PROFESSIONAL MAKEUVER) ---
+# ==========================================
+st.set_page_config(
+    page_title="CleanReport - Ultimate Data Matcher", 
+    page_icon="⚡", 
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
+# 1. GOOGLE ANALYTICS INTEGRATION
+ga_code = """
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-VEH0V9QEEV"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'G-VEH0V9QEEV');
+</script>
+"""
+components.html(ga_code, height=0, width=0)
+
+# 2. CSS HACK TO HIDE STREAMLIT BRANDING (HEADER VISIBLE FOR TOGGLE)
+hide_st_style = """
+            <style>
+            #MainMenu {visibility: hidden;} 
+            footer {visibility: hidden;}    
+            </style>
+            """
+st.markdown(hide_st_style, unsafe_allow_html=True)
+
+
+# ==========================================
+# --- SIDEBAR: MASTER FILES ---
+# ==========================================
+st.sidebar.title("⚙️ Master Files")
+st.sidebar.write("Upload your main databases here.")
+
+sales_file = st.sidebar.file_uploader("1. Upload Sales File (GC SALE)", type=["xlsx", "xls"])
+stock_file = st.sidebar.file_uploader("2. Upload Stock File (MSTC)", type=["xlsx", "xls"])
+
+
+# ==========================================
+# --- MAIN AREA: TARGET COMPANIES & PROCESSING ---
+# ==========================================
+st.title("⚡ CleanReport: Ultimate Excel Data Matcher")
+st.write("Upload Master Files in the **Left Sidebar** and provide Target Companies below.")
 st.markdown("---")
 
-# 2. Target Companies Input (Dual Option)
-st.subheader("3. Input Target Companies")
-col3, col4 = st.columns(2)
-with col3:
+st.subheader("🎯 Input Target Companies")
+col1, col2 = st.columns(2)
+with col1:
     target_file = st.file_uploader("Option A: Upload List (Excel, Word, TXT)", type=["xlsx", "xls", "docx", "txt"])
-with col4:
+with col2:
     raw_text_input = st.text_area("Option B: Paste Raw Names (One name per line)", height=150)
 
-# 3. Processing
+st.markdown("<br>", unsafe_allow_html=True)
+
+# Processing Execution
 if st.button("🚀 Process & Generate Report", use_container_width=True):
     if sales_file and stock_file and (target_file or raw_text_input.strip()):
         with st.spinner("Processing data, calculating metrics, and sorting records..."):
             try:
-                # Load Master Data with automatic .xls support
+                # Load Master Data
                 df_sales = read_master_file(sales_file)
                 df_stock = read_master_file(stock_file)
                 
@@ -200,9 +242,9 @@ if st.button("🚀 Process & Generate Report", use_container_width=True):
                 colB.metric("Found in Sales", len(found_in_sales))
                 colC.metric("Found in Stock", len(found_in_stock))
                 
-                st.download_button("📥 Download Final Excel Report", data=excel_data, file_name="Advanced_Automated_Report.xlsx")
+                st.download_button("📥 Download Final Excel Report", data=excel_data, file_name="Advanced_Automated_Report.xlsx", use_container_width=True)
                 
             except Exception as e:
                 st.error(f"Error during processing: {e}")
     else:
-        st.warning("⚠️ Please upload both Master files and provide target companies!")
+        st.warning("⚠️ Please upload both Master files in the sidebar and provide target companies!")
