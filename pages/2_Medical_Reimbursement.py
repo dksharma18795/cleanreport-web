@@ -92,7 +92,7 @@ st.markdown("Calculate admissible claims strictly as per CGHS rates and generate
 st.markdown("---")
 st.error("★ **Note:** Medical Procedure/Treatment rates are calculated as per GOI order no. F. No. 5-16/CGHS(HQ)/HEC/2024(Part 1) dt 03.10.2025")
 
-st.subheader("👤 1.Patient & Hospital General Details")
+st.subheader("👤 1. Global Patient & Hospital Details")
 col1, col2, col3, col4 = st.columns(4)
 with col1:
     dept_name = st.text_input("Department/Office Name")
@@ -109,7 +109,7 @@ with col3:
 with col4:
     selected_state = st.selectbox("State", list(india_locations.keys()))
     selected_district = st.selectbox("District", india_locations[selected_state])
-    treatment_type = st.selectbox("Treatment Type", ["OPD", "Day Care", "IPD"])
+    treatment_type = st.selectbox("Treatment Type", ["OPD", "OPD - Super Speciality/Psychiatry", "Day Care", "IPD"])
 
 adm_date, dis_date = None, None
 if treatment_type in ["Day Care", "IPD"]:
@@ -252,7 +252,6 @@ if len(st.session_state.bill_items) > 0:
 
         return pdf.output(dest='S').encode('latin1')
 
-    # Download Button Logic
     if st.button("📄 Process your Clean Report Now", use_container_width=True, type="primary"):
         pdf_bytes = create_pdf()
         b64 = base64.b64encode(pdf_bytes).decode()
@@ -261,7 +260,6 @@ if len(st.session_state.bill_items) > 0:
         
         href = f'<br><a href="data:application/pdf;base64,{b64}" download="CleanReport_Reimbursement_{file_identifier}.pdf" style="text-decoration:none; padding:10px; background-color:#4CAF50; color:white; border-radius:5px; font-weight:bold; display:block; text-align:center; margin-top:10px;">⬇️ Download your Clean Report</a>'
         st.markdown(href, unsafe_allow_html=True)
-    
     st.markdown("---")
 
 # ==========================================
@@ -300,21 +298,25 @@ st.markdown("<br>", unsafe_allow_html=True)
 if st.button("➡️ Continue to add Next Event", use_container_width=True):
     hosp_type = st.session_state["hosp_category"]
     
-    # Add Consultation
     if st.session_state[f"cons_fee_{fid}"] > 0:
         c_amount = st.session_state[f"cons_fee_{fid}"]
-        cghs_c_cap = 350.0 
+        
+        # Super Speciality/Psychiatry check
+        cghs_c_cap = 700.0 if treatment_type == "OPD - Super Speciality/Psychiatry" else 350.0 
+        
+        cghs_code = 'CN003' if treatment_type == "OPD - Super Speciality/Psychiatry" else 'CN001'
+        item_name = 'Consultation OPD - Super Speciality/Psychiatry' if treatment_type == "OPD - Super Speciality/Psychiatry" else 'Consultation OPD'
+        
         st.session_state.bill_items.append({
             'Event_ID': fid,
             'Date': st.session_state[f"cons_date_{fid}"].strftime('%d/%m/%Y'),
-            'CGHS_Code': 'CN001',
-            'Item': 'Consultation OPD',
+            'CGHS_Code': cghs_code,
+            'Item': item_name,
             'CGHS_Cap': cghs_c_cap,
             'Billed': c_amount,
             'Admissible': min(c_amount, cghs_c_cap)
         })
         
-    # Add Procedures
     for i in range(st.session_state.proc_count):
         p_name_val = st.session_state[f"p_name_{fid}_{i}"]
         p_fee_val = st.session_state[f"p_fee_{fid}_{i}"]
@@ -346,7 +348,6 @@ if st.button("➡️ Continue to add Next Event", use_container_width=True):
                 'Admissible': min(p_fee_val, cghs_p_cap)
             })
             
-    # Add Medicines
     med_amount = st.session_state[f"med_fee_{fid}"]
     if med_amount > 0:
         st.session_state.bill_items.append({
