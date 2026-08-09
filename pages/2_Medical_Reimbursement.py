@@ -276,7 +276,7 @@ with c1:
 with c2:
     c_fee = st.number_input("Consultation Fee Paid (₹)", min_value=0.0, step=10.0, key=f"cons_fee_{fid}")
 
-st.markdown("##### 🔬 Diagnostics & Procedures")
+st.markdown("##### 🔬 Diagnosis & Procedures Details")
 for i in range(st.session_state.proc_count):
     cc1, cc2, cc3 = st.columns([1.5, 3, 1.5])
     with cc1:
