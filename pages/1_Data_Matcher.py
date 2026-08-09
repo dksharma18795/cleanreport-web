@@ -120,7 +120,7 @@ with col2:
 st.markdown("<br>", unsafe_allow_html=True)
 
 # Processing Execution
-if st.button("🚀 Process & Generate Report", use_container_width=True):
+if st.button("🚀 Process & Generate Clean Report", use_container_width=True):
     if sales_file and stock_file and (target_file or raw_text_input.strip()):
         with st.spinner("Processing data, calculating metrics, and sorting records..."):
             try:
