@@ -92,7 +92,7 @@ st.markdown("Calculate admissible claims strictly as per CGHS rates and generate
 st.markdown("---")
 st.error("★ **Note:** Medical Procedure/Treatment rates are calculated as per GOI order no. F. No. 5-16/CGHS(HQ)/HEC/2024(Part 1) dt 03.10.2025")
 
-st.subheader("👤 1. Global Patient & Hospital Details")
+st.subheader("👤 1. Patient & Hospital- General Details")
 col1, col2, col3, col4 = st.columns(4)
 with col1:
     dept_name = st.text_input("Department/Office Name")
