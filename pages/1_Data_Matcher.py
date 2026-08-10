@@ -6,8 +6,29 @@ import re
 import difflib
 import docx
 
+st.set_page_config(
+    page_title="CleanReport - Ultimate Data Matcher", 
+    page_icon="⚡", 
+    layout="wide",
+    initial_sidebar_state="collapsed"
+)
+
+# HIDE SIDEBAR CSS
+st.markdown("""
+    <style>
+    [data-testid="collapsedControl"] {display: none;}
+    [data-testid="stSidebar"] {display: none;}
+    #MainMenu {visibility: hidden;} 
+    footer {visibility: hidden;}    
+    </style>
+""", unsafe_allow_html=True)
+
+# BACK BUTTON
+if st.button("🏠 Back to Dashboard"):
+    st.switch_page("app.py")
+
 # ==========================================
-# --- CORE MATCHING ENGINE (YOUR ORIGINAL LOGIC) ---
+# --- CORE MATCHING ENGINE ---
 # ==========================================
 def get_pure_core(name):
     if not isinstance(name, str) or str(name).lower() == 'nan': return ""
@@ -19,21 +40,16 @@ def get_pure_core(name):
 def standardize_company(raw_name, master_standards, master_core_dict, master_core_list):
     if not raw_name or str(raw_name).strip() == "": return None
     orig_str = str(raw_name).strip().upper()
-    
     for m in master_standards:
         if orig_str == m.upper(): return m
-            
     core_orig = get_pure_core(orig_str)
     if not core_orig: return None
-    
     if core_orig in master_core_dict: return master_core_dict[core_orig]
-        
     for m_core, m_orig in master_core_dict.items():
         if len(m_core) >= 5 and len(core_orig) >= 5:
             if m_core in core_orig or core_orig in m_core:
                 if difflib.SequenceMatcher(None, core_orig, m_core).ratio() > 0.6:
                     return m_orig
-                    
     matches = difflib.get_close_matches(core_orig, master_core_list, n=1, cutoff=0.75)
     if matches: return master_core_dict[matches[0]]
     return None
@@ -51,66 +67,28 @@ def extract_text_from_file(uploaded_file):
         elif uploaded_file.name.endswith('.txt'):
             text = uploaded_file.read().decode('utf-8')
     except Exception as e:
-        st.error(f"File padhne me error aayi: {e}")
+        st.error(f"File reading error: {e}")
     return text
 
 def read_master_file(uploaded_file):
     engine = 'calamine' if uploaded_file.name.endswith('.xls') else 'openpyxl'
     return pd.read_excel(uploaded_file, engine=engine)
 
-
 # ==========================================
-# --- WEB APP UI SETUP (PROFESSIONAL MAKEUVER) ---
-# ==========================================
-st.set_page_config(
-    page_title="CleanReport - Ultimate Data Matcher", 
-    page_icon="⚡", 
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
-
-# 1. GOOGLE ANALYTICS INTEGRATION
-ga_code = """
-<!-- Google tag (gtag.js) -->
-<script async src="https://www.googletagmanager.com/gtag/js?id=G-VEH0V9QEEV"></script>
-<script>
-  window.dataLayer = window.dataLayer || [];
-  function gtag(){dataLayer.push(arguments);}
-  gtag('js', new Date());
-
-  gtag('config', 'G-VEH0V9QEEV');
-</script>
-"""
-components.html(ga_code, height=0, width=0)
-
-# 2. CSS HACK TO HIDE STREAMLIT BRANDING (HEADER VISIBLE FOR TOGGLE)
-hide_st_style = """
-            <style>
-            #MainMenu {visibility: hidden;} 
-            footer {visibility: hidden;}    
-            </style>
-            """
-st.markdown(hide_st_style, unsafe_allow_html=True)
-
-
-# ==========================================
-# --- SIDEBAR: MASTER FILES ---
-# ==========================================
-st.sidebar.title("⚙️ Master Files")
-st.sidebar.write("Upload your main databases here.")
-
-sales_file = st.sidebar.file_uploader("1. Upload Sales File (GC SALE)", type=["xlsx", "xls"])
-stock_file = st.sidebar.file_uploader("2. Upload Stock File (MSTC)", type=["xlsx", "xls"])
-
-
-# ==========================================
-# --- MAIN AREA: TARGET COMPANIES & PROCESSING ---
+# --- MAIN AREA ---
 # ==========================================
 st.title("⚡ CleanReport: Ultimate Excel Data Matcher")
-st.write("Upload Master Files in the **Left Sidebar** and provide Target Companies below.")
 st.markdown("---")
 
-st.subheader("🎯 Input Target Companies")
+st.subheader("⚙️ 1. Upload Master Files")
+c1, c2 = st.columns(2)
+with c1:
+    sales_file = st.file_uploader("1. Upload Sales File (GC SALE)", type=["xlsx", "xls"])
+with c2:
+    stock_file = st.file_uploader("2. Upload Stock File (MSTC)", type=["xlsx", "xls"])
+
+st.markdown("<br>", unsafe_allow_html=True)
+st.subheader("🎯 2. Input Target Companies")
 col1, col2 = st.columns(2)
 with col1:
     target_file = st.file_uploader("Option A: Upload List (Excel, Word, TXT)", type=["xlsx", "xls", "docx", "txt"])
@@ -119,12 +97,10 @@ with col2:
 
 st.markdown("<br>", unsafe_allow_html=True)
 
-# Processing Execution
-if st.button("🚀 Process & Generate Clean Report", use_container_width=True):
+if st.button("🚀 Process & Generate Clean Report", use_container_width=True, type="primary"):
     if sales_file and stock_file and (target_file or raw_text_input.strip()):
         with st.spinner("Processing data, calculating metrics, and sorting records..."):
             try:
-                # Load Master Data
                 df_sales = read_master_file(sales_file)
                 df_stock = read_master_file(stock_file)
                 
@@ -144,7 +120,6 @@ if st.button("🚀 Process & Generate Clean Report", use_container_width=True):
                         master_core_dict[core] = m_name
                 master_core_list = list(master_core_dict.keys())
 
-                # Combine text from File + Paste Box
                 combined_text = ""
                 if target_file:
                     combined_text += extract_text_from_file(target_file) + "\n"
@@ -154,7 +129,6 @@ if st.button("🚀 Process & Generate Clean Report", use_container_width=True):
                 raw_names_list = [name.strip() for name in combined_text.split('\n') if name.strip()]
                 total_provided = len(raw_names_list)
                 
-                # Standardize
                 valid_target_names = set()
                 not_found_names = []
 
@@ -165,18 +139,14 @@ if st.button("🚀 Process & Generate Clean Report", use_container_width=True):
                     else:
                         not_found_names.append(raw_name)
 
-                # Identify Metrics
                 found_in_sales = [c for c in valid_target_names if c in sales_unique_raw]
                 found_in_stock = [c for c in valid_target_names if c in stock_unique_raw]
-                
                 missing_in_sales = [c for c in valid_target_names if c not in sales_unique_raw]
                 missing_in_stock = [c for c in valid_target_names if c not in stock_unique_raw]
                 
-                # Filter Data
                 sales_filtered = df_sales[sales_companies_series.isin(valid_target_names)].copy()
                 stock_filtered = df_stock[stock_companies_series.isin(valid_target_names)].copy()
                 
-                # Drop Columns & Sort by Date
                 columns_to_drop = ['INDENT_NUM', 'STATE_NAME', 'HSN_CODE']
                 sales_filtered = sales_filtered.drop(columns=[col for col in columns_to_drop if col in sales_filtered.columns])
                 
@@ -185,11 +155,6 @@ if st.button("🚀 Process & Generate Clean Report", use_container_width=True):
                     sales_filtered = sales_filtered.sort_values(by='INDENT_DTE_TEMP', ascending=True)
                     sales_filtered = sales_filtered.drop(columns=['INDENT_DTE_TEMP'])
                 
-                # ==========================================
-                # GOAL: Comprehensive Summary Stats & Tables
-                # ==========================================
-                
-                # 1. Comparative Stats Table
                 df_stats = pd.DataFrame({
                     "DATA ANALYTICS METRIC": [
                         "Total Companies Provided (Raw Input)",
@@ -198,20 +163,14 @@ if st.button("🚀 Process & Generate Clean Report", use_container_width=True):
                         "Companies Present in STOCK File",
                         "Missing from SALES File",
                         "Missing from STOCK File",
-                        "NOT FOUND in Any Master File (Neither Sales nor Stock)"
+                        "NOT FOUND in Any Master File"
                     ],
                     "COUNT": [
-                        total_provided,
-                        len(valid_target_names),
-                        len(found_in_sales),
-                        len(found_in_stock),
-                        len(missing_in_sales),
-                        len(missing_in_stock),
-                        len(not_found_names)
+                        total_provided, len(valid_target_names), len(found_in_sales),
+                        len(found_in_stock), len(missing_in_sales), len(missing_in_stock), len(not_found_names)
                     ]
                 })
 
-                # 2. Detailed Lists Table
                 max_len = max(len(missing_in_sales), len(missing_in_stock), len(not_found_names))
                 df_lists = pd.DataFrame({
                     "Missing in Sales (List)": missing_in_sales + [""] * (max_len - len(missing_in_sales)),
@@ -219,22 +178,16 @@ if st.button("🚀 Process & Generate Clean Report", use_container_width=True):
                     "Not Found in Any File (List)": not_found_names + [""] * (max_len - len(not_found_names))
                 })
                 
-                # Output to Excel with multiple tables on one sheet
                 output = io.BytesIO()
                 with pd.ExcelWriter(output, engine='openpyxl') as writer:
                     sales_filtered.to_excel(writer, sheet_name="Sales_Data", index=False)
                     stock_filtered.to_excel(writer, sheet_name="Stock_Data", index=False)
-                    
-                    # Write Stats Table at the top
                     df_stats.to_excel(writer, sheet_name="Summary_Analytics", index=False, startrow=0)
-                    
-                    # Write Detailed Lists slightly below the stats table
                     start_row_for_lists = len(df_stats) + 4
                     df_lists.to_excel(writer, sheet_name="Summary_Analytics", index=False, startrow=start_row_for_lists)
                 
                 excel_data = output.getvalue()
                 
-                # Display Live Analytics on the Web App UI
                 st.success("✅ Report Generated Successfully!")
                 st.subheader("📊 Quick Analytics")
                 colA, colB, colC = st.columns(3)
@@ -247,4 +200,4 @@ if st.button("🚀 Process & Generate Clean Report", use_container_width=True):
             except Exception as e:
                 st.error(f"Error during processing: {e}")
     else:
-        st.warning("⚠️ Please upload both Master files in the sidebar and provide target companies!")
+        st.warning("⚠️ Please upload both Master files and provide target companies!")

@@ -5,7 +5,20 @@ from fpdf import FPDF
 import base64
 import os
 
-st.set_page_config(page_title="Medical Reimbursement Calculator", page_icon="🏥", layout="wide")
+st.set_page_config(page_title="Medical Reimbursement Calculator", page_icon="🏥", layout="wide", initial_sidebar_state="collapsed")
+
+# HIDE SIDEBAR CSS
+st.markdown("""
+    <style>
+    [data-testid="collapsedControl"] {display: none;}
+    [data-testid="stSidebar"] {display: none;}
+    #MainMenu {visibility: hidden;} 
+    footer {visibility: hidden;}    
+    </style>
+""", unsafe_allow_html=True)
+
+if st.button("🏠 Back to Dashboard"):
+    st.switch_page("app.py")
 
 # ==========================================
 # 1. ALL INDIAN STATES & DISTRICTS DICTIONARY
@@ -65,33 +78,6 @@ def load_cghs_data():
 
 cghs_df = load_cghs_data()
 procedure_list = cghs_df['Display_Name'].tolist() if not cghs_df.empty else []
-
-# ==========================================
-# 3. SIDEBAR - IMPORTANT DOWNLOAD LINKS
-# ==========================================
-st.sidebar.markdown("### 📥 Important Govt Forms")
-st.sidebar.info("Click the buttons below to download essential reimbursement forms.")
-
-try:
-    with open("form_97.pdf", "rb") as pdf_file1:
-        st.sidebar.download_button(label="📄 Download Med-97 Form", data=pdf_file1, file_name="Med-97_Essentiality_Certificate.pdf", mime="application/pdf", use_container_width=True)
-except FileNotFoundError:
-    st.sidebar.warning("⚠️ form_97.pdf not found in folder. Please add it to enable download.")
-
-try:
-    with open("cghs_mrc.pdf", "rb") as pdf_file2:
-        st.sidebar.download_button(label="📄 Download CGHS MRC Form", data=pdf_file2, file_name="CGHS_Reimbursement_Form.pdf", mime="application/pdf", use_container_width=True)
-except FileNotFoundError:
-    st.sidebar.warning("⚠️ cghs_mrc.pdf not found in folder. Please add it to enable download.")
-
-try:
-    with open("cghs_order.pdf", "rb") as pdf_file3:
-        st.sidebar.download_button(label="📄 Download CGHS Official Order", data=pdf_file3, file_name="CGHS_Authorized_Rate_List.pdf", mime="application/pdf", use_container_width=True)
-except FileNotFoundError:
-    st.sidebar.warning("⚠️ cghs_order.pdf not found in folder. Please add it to enable download.")
-
-st.sidebar.markdown("---")
-st.sidebar.markdown("**Note:** Please attach the filled forms along with the final generated bill and original receipts.")
 
 # ==========================================
 # 4. SESSION STATE SETUP
@@ -183,9 +169,6 @@ if len(st.session_state.bill_items) > 0:
     colA.metric("Total Amount Paid (Market Rate)", f"₹ {total_actual}")
     colB.metric("Total Admissible Amount (CGHS Rate)", f"₹ {total_admissible}")
     
-    # ----------------------------------------
-    # BRANDED PDF GENERATION FUNCTION
-    # ----------------------------------------
     def create_pdf():
         pdf = FPDF()
         pdf.add_page()
@@ -391,3 +374,33 @@ if st.button("➡️ Save This Event to Bill", use_container_width=True):
     st.session_state.form_id += 1
     st.session_state.proc_count = 1
     st.rerun()
+
+# ==========================================
+# 9. IMPORTANT DOWNLOAD LINKS (Moved to Bottom)
+# ==========================================
+st.markdown("---")
+st.subheader("📥 Important Govt Forms")
+st.info("Click the buttons below to download essential reimbursement forms. Please attach the filled forms along with the final generated bill and original receipts.")
+
+col_f1, col_f2, col_f3 = st.columns(3)
+
+with col_f1:
+    try:
+        with open("form_97.pdf", "rb") as pdf_file1:
+            st.download_button(label="📄 Download Med-97 Form", data=pdf_file1, file_name="Med-97_Essentiality_Certificate.pdf", mime="application/pdf", use_container_width=True)
+    except FileNotFoundError:
+        st.warning("⚠️ form_97.pdf not found in folder.")
+
+with col_f2:
+    try:
+        with open("cghs_mrc.pdf", "rb") as pdf_file2:
+            st.download_button(label="📄 Download CGHS MRC Form", data=pdf_file2, file_name="CGHS_Reimbursement_Form.pdf", mime="application/pdf", use_container_width=True)
+    except FileNotFoundError:
+        st.warning("⚠️ cghs_mrc.pdf not found in folder.")
+
+with col_f3:
+    try:
+        with open("cghs_order.pdf", "rb") as pdf_file3:
+            st.download_button(label="📄 Download CGHS Official Order", data=pdf_file3, file_name="CGHS_Authorized_Rate_List.pdf", mime="application/pdf", use_container_width=True)
+    except FileNotFoundError:
+        st.warning("⚠️ cghs_order.pdf not found in folder.")
