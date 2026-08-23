@@ -86,11 +86,17 @@ if 'bill_items' not in st.session_state:
     st.session_state.bill_items = []
 if 'proc_count' not in st.session_state:
     st.session_state.proc_count = 1
+# 🔥 NEW: Track medicine rows
+if 'med_count' not in st.session_state:
+    st.session_state.med_count = 1
 if 'form_id' not in st.session_state:
     st.session_state.form_id = 1 
 
 def add_procedure_row():
     st.session_state.proc_count += 1
+
+def add_medicine_row():
+    st.session_state.med_count += 1
 
 def sync_dates():
     fid = st.session_state.form_id
@@ -150,17 +156,21 @@ if len(st.session_state.bill_items) > 0:
     
     sorted_df_list = []
     display_count = 1
+    phase_mapping = {} # 🔥 Track phases for deletion
+    
     for event in event_dates.index:
         edf = bill_df[bill_df['Event_ID'] == event].copy()
         edf = edf.sort_values('Date_obj') 
-        edf['Event_Phase'] = f"Phase #{display_count}"
+        phase_label = f"Phase #{display_count}"
+        edf['Event_Phase'] = phase_label
         sorted_df_list.append(edf)
+        phase_mapping[phase_label] = event
         display_count += 1
         
     final_sorted_df = pd.concat(sorted_df_list)
     display_df = final_sorted_df[['Event_Phase', 'Date', 'CGHS_Code', 'Item', 'Billed', 'Admissible']]
     
-    st.dataframe(display_df, use_container_width=True)
+    st.dataframe(display_df, use_container_width=True, hide_index=True)
     
     total_actual = final_sorted_df['Billed'].sum()
     total_admissible = final_sorted_df['Admissible'].sum()
@@ -169,6 +179,19 @@ if len(st.session_state.bill_items) > 0:
     colA.metric("Total Amount Paid (Market Rate)", f"₹ {total_actual}")
     colB.metric("Total Admissible Amount (CGHS Rate)", f"₹ {total_admissible}")
     
+    # 🔥 NEW: EDIT / DELETE SECTION
+    with st.expander("✏️ Made a mistake? Edit / Delete Saved Events"):
+        st.warning("Select the Phase you want to delete. Once deleted, you can re-enter it correctly below.")
+        del_col1, del_col2 = st.columns([3, 1])
+        with del_col1:
+            del_phase = st.selectbox("Select Phase to Delete", list(phase_mapping.keys()))
+        with del_col2:
+            st.markdown("<br>", unsafe_allow_html=True)
+            if st.button("🗑️ Delete Selected Phase", use_container_width=True):
+                event_id_to_delete = phase_mapping[del_phase]
+                st.session_state.bill_items = [i for i in st.session_state.bill_items if i['Event_ID'] != event_id_to_delete]
+                st.rerun()
+
     def create_pdf():
         pdf = FPDF()
         pdf.add_page()
@@ -301,8 +324,16 @@ for i in range(st.session_state.proc_count):
 
 st.button("➕ Add Another Procedure", on_click=add_procedure_row)
 
+# 🔥 NEW: MULTIPLE MEDICINE BILLS SECTION
 st.markdown("##### 💊 Medicines")
-m_fee = st.number_input("Total Amount Paid for Medicines (₹) during this event", min_value=0.0, step=10.0, key=f"med_fee_{fid}")
+for i in range(st.session_state.med_count):
+    cm1, cm2 = st.columns([3, 1])
+    with cm1:
+        st.text_input(f"Bill/Receipt No. (Optional) #{i+1}", placeholder="e.g., Apollo Pharmacy Bill #123", key=f"m_desc_{fid}_{i}")
+    with cm2:
+        st.number_input(f"Amount Paid (₹) #{i+1}", min_value=0.0, step=10.0, key=f"m_fee_{fid}_{i}")
+
+st.button("➕ Add Another Medicine Bill", on_click=add_medicine_row)
 st.markdown("<br>", unsafe_allow_html=True)
 
 # ==========================================
@@ -359,24 +390,33 @@ if st.button("➡️ Save This Event to Bill", use_container_width=True):
                 'Admissible': min(p_fee_val, cghs_p_cap)
             })
             
-    med_amount = st.session_state[f"med_fee_{fid}"]
-    if med_amount > 0:
-        st.session_state.bill_items.append({
-            'Event_ID': fid,
-            'Date': st.session_state[f"cons_date_{fid}"].strftime('%d/%m/%Y'),
-            'CGHS_Code': 'MED',
-            'Item': 'Medicines (100% Claimable)',
-            'CGHS_Cap': 'Full',
-            'Billed': med_amount,
-            'Admissible': med_amount
-        })
+    # 🔥 NEW: SAVE MULTIPLE MEDICINE BILLS
+    for i in range(st.session_state.med_count):
+        med_amount = st.session_state[f"m_fee_{fid}_{i}"]
+        med_desc = st.session_state[f"m_desc_{fid}_{i}"]
+        
+        if med_amount > 0:
+            item_name = 'Medicines (100% Claimable)'
+            if med_desc:
+                item_name += f" - {med_desc}"
+                
+            st.session_state.bill_items.append({
+                'Event_ID': fid,
+                'Date': st.session_state[f"cons_date_{fid}"].strftime('%d/%m/%Y'),
+                'CGHS_Code': 'MED',
+                'Item': item_name,
+                'CGHS_Cap': 'Full',
+                'Billed': med_amount,
+                'Admissible': med_amount
+            })
         
     st.session_state.form_id += 1
     st.session_state.proc_count = 1
+    st.session_state.med_count = 1 # Reset medicine rows count
     st.rerun()
 
 # ==========================================
-# 9. IMPORTANT DOWNLOAD LINKS (Moved to Bottom)
+# 9. IMPORTANT DOWNLOAD LINKS 
 # ==========================================
 st.markdown("---")
 st.subheader("📥 Important Govt Forms")
