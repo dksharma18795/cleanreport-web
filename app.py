@@ -76,5 +76,5 @@ with col3:
         </div>
         <br>
     """, unsafe_allow_html=True)
-    if st.button("🚀 Launch NDA Calculator", use_container_width=True, type="primary"):
+    if st.button("🚀 Launch NDA (Night Duty Allowance) Calculator", use_container_width=True, type="primary"):
         st.switch_page("pages/3_NDA_Calculator.py")
