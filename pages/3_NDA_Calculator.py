@@ -28,7 +28,7 @@ ALL_BASIC_PAYS = sorted(list(set([pay for level in PAY_MATRIX.values() for pay i
 # ==========================================
 # 2. PAGE SETUP & CSS
 # ==========================================
-st.set_page_config(page_title="Smart NDA Register", page_icon="📝", layout="wide")
+st.set_page_config(page_title="CleanReport NDA Register", page_icon="📝", layout="wide")
 
 hide_st_style = """
     <style>
@@ -38,6 +38,32 @@ hide_st_style = """
     footer {visibility: hidden;}
     div[data-testid="stDataEditor"] th { font-size: 12px !important; text-align: center !important; }
     div[data-testid="stDataEditor"] td { cursor: pointer; }
+    
+    /* ENTERPRISE GRADE BIG CLICKABLE CARDS */
+    div[data-testid="stCheckbox"] {
+        background-color: #f8fafc;
+        border: 1.5px solid #cbd5e1;
+        border-radius: 6px;
+        padding: 6px 12px;
+        margin-bottom: 2px;
+        transition: all 0.2s ease-in-out;
+    }
+    div[data-testid="stCheckbox"]:hover {
+        background-color: #e2e8f0;
+        border-color: #94a3b8;
+    }
+    div[data-testid="stCheckbox"] label {
+        cursor: pointer !important;
+        width: 100% !important;
+        height: 100% !important;
+        display: flex !important;
+        align-items: center !important;
+        margin: 0 !important;
+    }
+    div[data-testid="stCheckbox"] label span {
+        font-weight: 600;
+        font-size: 13px;
+    }
     </style>
 """
 st.markdown(hide_st_style, unsafe_allow_html=True)
@@ -53,16 +79,15 @@ if 'active_months' not in st.session_state: st.session_state.active_months = []
 if 'att_dict' not in st.session_state: st.session_state.att_dict = {} 
 for key in ['in_empno', 'in_name', 'in_post']:
     if key not in st.session_state: st.session_state[key] = ""
+if 'report_generated' not in st.session_state: st.session_state.report_generated = False
 
 # ==========================================
-# 4. HELPER FUNCTIONS & DA LOGIC
+# 4. HELPER FUNCTIONS
 # ==========================================
 def get_formatted_dates(year, month):
     num_days = calendar.monthrange(year, month)[1]
     return [date(year, month, d).strftime("%d %b\n(%a)") for d in range(1, num_days + 1)]
-
 def get_month_name(m, y): return f"{calendar.month_name[m]} {y}"
-
 def get_auto_da(m, y):
     if y <= 2020: return 17.0
     elif y == 2021: return 17.0 if m < 7 else 28.0
@@ -71,20 +96,17 @@ def get_auto_da(m, y):
     elif y == 2024: return 50.0 if m < 7 else 53.0
     elif y == 2025: return 56.0 if m < 7 else 58.0
     elif y == 2026: return 60.0 if m < 7 else 63.0
-    # Future dates logic: return 0 to force manual entry
     return 0.0
 
 def number_to_words(n):
     if n == 0: return "Zero"
     ones = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen"]
     tens = ["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"]
-    
     def get_words(num):
         if num == 0: return ""
         elif num < 20: return ones[num] + " "
         elif num < 100: return tens[num // 10] + " " + get_words(num % 10)
         else: return ones[num // 100] + " Hundred " + get_words(num % 100)
-    
     words = []
     crore = int(n // 10000000)
     n = n % 10000000
@@ -92,12 +114,10 @@ def number_to_words(n):
     n = n % 100000
     thous = int(n // 1000)
     n = int(n % 1000)
-    
     if crore > 0: words.append(get_words(crore).strip() + " Crore ")
     if lakh > 0: words.append(get_words(lakh).strip() + " Lakh ")
     if thous > 0: words.append(get_words(thous).strip() + " Thousand ")
     if n > 0: words.append(get_words(n).strip())
-    
     return "Rupees " + "".join(words).strip() + " Only"
 
 def add_employee_callback(sel_level, sel_bp):
@@ -111,6 +131,15 @@ def add_employee_callback(sel_level, sel_bp):
         st.session_state.in_empno, st.session_state.in_name, st.session_state.in_post = "", "", ""
 
 def go_to_tab(tab_name): st.session_state.current_nav = tab_name
+
+# --- BULLETPROOF INSTANT SYNC CALLBACK ---
+def sync_cb(m_, y_, eid_, dt_, k_):
+    val = st.session_state[k_]
+    # Update underlying dataframe immediately
+    emp_idx = st.session_state.att_dict[(m_, y_)]['Emp No'].astype(str) == str(eid_)
+    st.session_state.att_dict[(m_, y_)].loc[emp_idx, dt_] = val
+    # Force Grid to re-render to reflect the change
+    st.session_state[f"ed_key_{m_}_{y_}"] = st.session_state.get(f"ed_key_{m_}_{y_}", 0) + 1
 
 # ==========================================
 # 5. DYNAMIC EXCEL ENGINE
@@ -126,9 +155,6 @@ def generate_dynamic_excel(ministry, dept, office, period_str, active_months, at
     thin = Side(style='thin')
     border_all = Border(left=thin, right=thin, top=thin, bottom=thin)
     
-    # ---------------------------------------------
-    # SHEET 1: PART I - ADMINISTRATION
-    # ---------------------------------------------
     ws_admin = wb.create_sheet("Part I - Administration")
     ws_admin.page_setup.orientation = ws_admin.ORIENTATION_LANDSCAPE
     ws_admin.page_setup.paperSize = ws_admin.PAPERSIZE_A4
@@ -185,28 +211,22 @@ def generate_dynamic_excel(ministry, dept, office, period_str, active_months, at
             c_tot.border = border_all; c_tot.font = font_bold; c_tot.alignment = align_c
             att_cell_refs[(m, y)][emp_row['Emp No']] = f"'Part I - Administration'!{tot_col_letter}{row_idx}"
             row_idx += 1
-            
-        # Admin Signatures
-        row_idx += 3
-        ws_admin.cell(row=row_idx, column=2, value="_______________________").font = font_bold
-        ws_admin.cell(row=row_idx+1, column=2, value="Section In-Charge").font = font_bold
+        row_idx += 2
         
-        ws_admin.cell(row=row_idx, column=tot_col_idx-2, value="_______________________").font = font_bold
-        ws_admin.cell(row=row_idx+1, column=tot_col_idx-2, value="Office Spdt/Estb In-Charge").font = font_bold
-        
-        ws_admin.cell(row=row_idx+4, column=(tot_col_idx)//2, value="_______________________").font = font_bold; ws_admin.cell(row=row_idx+4, column=(tot_col_idx)//2).alignment = align_c
-        ws_admin.cell(row=row_idx+5, column=(tot_col_idx)//2, value="Head of Office").font = font_bold; ws_admin.cell(row=row_idx+5, column=(tot_col_idx)//2).alignment = align_c
-        ws_admin.cell(row=row_idx+6, column=(tot_col_idx)//2, value="(Counter Signed)").font = font_bold; ws_admin.cell(row=row_idx+6, column=(tot_col_idx)//2).alignment = align_c
-        row_idx += 8
+    row_idx += 2
+    ws_admin.cell(row=row_idx, column=2, value="_______________________").font = font_bold
+    ws_admin.cell(row=row_idx+1, column=2, value="Section In-Charge").font = font_bold
+    ws_admin.cell(row=row_idx, column=24, value="_______________________").font = font_bold
+    ws_admin.cell(row=row_idx+1, column=24, value="Office Spdt/Estb In-Charge").font = font_bold
+    ws_admin.cell(row=row_idx+4, column=13, value="_______________________").font = font_bold; ws_admin.cell(row=row_idx+4, column=13).alignment = align_c
+    ws_admin.cell(row=row_idx+5, column=13, value="Head of Office").font = font_bold; ws_admin.cell(row=row_idx+5, column=13).alignment = align_c
+    ws_admin.cell(row=row_idx+6, column=13, value="(Counter Signed)").font = font_bold; ws_admin.cell(row=row_idx+6, column=13).alignment = align_c
         
     ws_admin.column_dimensions['A'].width = 10
     ws_admin.column_dimensions['B'].width = 22
     for i in range(3, 3+31): ws_admin.column_dimensions[get_column_letter(i)].width = 3.2
     ws_admin.column_dimensions[get_column_letter(3+31)].width = 6
 
-    # ---------------------------------------------
-    # SHEET 2: PART II - FINANCE
-    # ---------------------------------------------
     ws_fin = wb.create_sheet("Part II - Finance")
     ws_fin.page_setup.orientation = ws_fin.ORIENTATION_LANDSCAPE
     ws_fin.page_setup.paperSize = ws_fin.PAPERSIZE_A4
@@ -231,7 +251,6 @@ def generate_dynamic_excel(ministry, dept, office, period_str, active_months, at
         m_name = calendar.month_name[m]
         month_logs = logs_df[(logs_df["Year"] == y) & (logs_df["Month"] == m_name)]
         if month_logs.empty or month_logs["Duties"].sum() == 0: continue
-        
         da_val = edited_da_df[(edited_da_df['Month'] == m_name) & (edited_da_df['Year'] == y)]['DA (%)'].values[0]
         
         ws_fin.merge_cells(start_row=row_idx, start_column=1, end_row=row_idx, end_column=9)
@@ -345,13 +364,10 @@ def generate_dynamic_excel(ministry, dept, office, period_str, active_months, at
     ws_fin.cell(row=row_idx, column=1).alignment = align_c
     row_idx += 4
     
-    # Finance Signatures
     ws_fin.cell(row=row_idx, column=2, value="_______________________").font = font_bold
     ws_fin.cell(row=row_idx+1, column=2, value="Office Spdt/Estb In-Charge").font = font_bold
-    
     ws_fin.cell(row=row_idx, column=c_idx+2, value="_______________________").font = font_bold
     ws_fin.cell(row=row_idx+1, column=c_idx+2, value="Accountant/Accounts Officer").font = font_bold
-    
     ws_fin.cell(row=row_idx+4, column=(c_idx+4)//2, value="_______________________").font = font_bold; ws_fin.cell(row=row_idx+4, column=(c_idx+4)//2).alignment = align_c
     ws_fin.cell(row=row_idx+5, column=(c_idx+4)//2, value="Head of Office").font = font_bold; ws_fin.cell(row=row_idx+5, column=(c_idx+4)//2).alignment = align_c
     ws_fin.cell(row=row_idx+6, column=(c_idx+4)//2, value="(Counter Signed)").font = font_bold; ws_fin.cell(row=row_idx+6, column=(c_idx+4)//2).alignment = align_c
@@ -681,7 +697,7 @@ def generate_official_pdf(ministry, dept, office, period_str, active_months, att
 # ==========================================
 # 8. MAIN UI NAVIGATION
 # ==========================================
-st.title("📝 Advanced NDA Register & Calculator")
+st.title("📝 CleanReport NDA Register")
 st.markdown("Automated 7th CPC Multi-Month Night Duty Allowance Generator (Built-in DA & 10-Min Weightage Formula).")
 st.markdown("---")
 
@@ -741,8 +757,6 @@ elif selected_tab == nav_options[1]:
                     st.rerun()
         
         if st.session_state.active_months:
-            st.info("💡 **PRO TIP:** If an employee's Basic Pay changes due to promotion/increment, just click on their 'Basic Pay (₹) ✏️▾' cell to select the new 7th CPC amount from the master list! It will carry forward to next months automatically.")
-            
             for period in st.session_state.active_months:
                 m, y = period['m'], period['y']
                 date_cols = get_formatted_dates(y, m)
@@ -754,47 +768,73 @@ elif selected_tab == nav_options[1]:
                 else:
                     existing_att = st.session_state.att_dict[(m, y)].copy().drop_duplicates("Emp No")
                     base_df = st.session_state.emp_db.copy().drop_duplicates("Emp No")
-                    base_df.set_index("Emp No", inplace=True)
-                    existing_att.set_index("Emp No", inplace=True)
-                    base_df.update(existing_att)
-                    base_df.reset_index(inplace=True)
+                    
+                    # --- FIXED AUTO-WIPE BUG ---
+                    # Merge securely to protect existing date data
+                    merged_df = pd.merge(base_df, existing_att.drop(columns=["Name", "Post", "Level", "Basic Pay (₹)"], errors='ignore'), on="Emp No", how="left")
                     for col in date_cols:
-                        if col not in base_df.columns: base_df[col] = False
-                        base_df[col] = base_df[col].fillna(False).astype(bool)
-                    st.session_state.att_dict[(m, y)] = base_df
+                        if col not in merged_df.columns:
+                            merged_df[col] = False
+                        merged_df[col] = merged_df[col].fillna(False).astype(bool)
+                    st.session_state.att_dict[(m, y)] = merged_df
 
             for idx, period in enumerate(st.session_state.active_months):
                 m, y = period['m'], period['y']
+                st.markdown("---")
                 st.markdown(f"#### 📅 {get_month_name(m, y)} &nbsp;&nbsp; *(Applicable DA: {get_auto_da(m, y)}%)*")
                 
                 date_cols = get_formatted_dates(y, m)
-                
-                # --- QUICK FILL BUTTONS (FIXED CACHING BUG) ---
-                c_bulk1, c_bulk2, c_bulk3 = st.columns(3)
-                with c_bulk1:
-                    if idx > 0:
-                        if st.button(f"📋 Copy Prev Month Pattern", key=f"cpm_{m}_{y}", use_container_width=True):
-                            prev_m, prev_y = st.session_state.active_months[idx-1]['m'], st.session_state.active_months[idx-1]['y']
-                            prev_dates = get_formatted_dates(prev_y, prev_m)
-                            for curr_d, d_col in enumerate(date_cols):
-                                if curr_d < len(prev_dates):
-                                    st.session_state.att_dict[(m, y)][d_col] = st.session_state.att_dict[(prev_m, prev_y)][prev_dates[curr_d]].values
-                            if f"editor_{m}_{y}" in st.session_state: del st.session_state[f"editor_{m}_{y}"]
-                            st.rerun()
-                with c_bulk2:
-                    if st.button(f"✅ Mark All Present", key=f"map_{m}_{y}", use_container_width=True):
-                        for d_col in date_cols: st.session_state.att_dict[(m, y)][d_col] = True
-                        if f"editor_{m}_{y}" in st.session_state: del st.session_state[f"editor_{m}_{y}"]
-                        st.rerun()
-                with c_bulk3:
-                    if st.button(f"🧹 Clear All", key=f"ca_{m}_{y}", use_container_width=True):
-                        for d_col in date_cols: st.session_state.att_dict[(m, y)][d_col] = False
-                        if f"editor_{m}_{y}" in st.session_state: del st.session_state[f"editor_{m}_{y}"]
-                        st.rerun()
-                
                 full_df = st.session_state.att_dict[(m, y)]
+
+                idx_key = f"idx_{m}_{y}"
+                if idx_key not in st.session_state: st.session_state[idx_key] = 0
+                if st.session_state[idx_key] >= len(date_cols): st.session_state[idx_key] = 0
+                
+                ed_key_var = f"ed_key_{m}_{y}"
+                
+                # --- ⚡ SMART HORIZONTAL ROSTER (FAST ENTRY) ---
+                st.markdown("##### ⚡ Daily Duty Roster (Fast Entry)")
+                
+                c_date, c_cards, c_btn = st.columns([2, 6, 2])
+                
+                with c_date:
+                    sel_date = st.selectbox("📅 Date:", date_cols, index=st.session_state[idx_key], key=f"sb_dummy_{m}_{y}_{st.session_state.get(ed_key_var, 0)}")
+                    st.session_state[idx_key] = date_cols.index(sel_date)
+                    
+                with c_cards:
+                    st.markdown("<div style='margin-top:2px;'></div>", unsafe_allow_html=True)
+                    cb_cols = st.columns(3) # 3 columns for better spacing
+                    
+                    for i, (_, row) in enumerate(full_df.iterrows()):
+                        emp_id = str(row['Emp No'])
+                        emp_name = str(row['Name']).split()[0] 
+                        current_val = bool(row[sel_date])
+                        cb_key = f"cb_{m}_{y}_{emp_id}_{sel_date}"
+                        
+                        if cb_key not in st.session_state:
+                            st.session_state[cb_key] = current_val
+                        
+                        with cb_cols[i % 3]:
+                            st.checkbox(f"🧑‍💼 {emp_id} - {emp_name}", value=current_val, key=cb_key, on_change=sync_cb, args=(m, y, emp_id, sel_date, cb_key))
+                
+                with c_btn:
+                    st.markdown("<div style='margin-top:2px;'></div>", unsafe_allow_html=True)
+                    if st.button("➡️ Next Day", key=f"next_btn_{m}_{y}", type="primary", use_container_width=True):
+                        curr_idx = date_cols.index(sel_date)
+                        if curr_idx < len(date_cols) - 1:
+                            st.session_state[idx_key] = curr_idx + 1
+                        else:
+                            st.session_state[idx_key] = 0
+                            st.toast("Reached the end of the month!")
+                        
+                        st.session_state[ed_key_var] = st.session_state.get(ed_key_var, 0) + 1
+                        st.rerun()
+
+                # --- ✏️ MANUAL GRID OVERRIDE ---
+                st.markdown("##### ✏️ Manual Grid Override (Optional)")
+                
                 display_df = full_df.copy()
-                display_df.index = display_df["Emp No"].astype(str) + " | " + display_df["Name"]
+                display_df.index = display_df["Emp No"].astype(str) + " | " + display_df["Name"].astype(str)
                 display_df.index.name = "Emp No | Name"
                 display_df.rename(columns={"Basic Pay (₹)": "Basic Pay (₹) ✏️▾"}, inplace=True)
                 cols_to_show = ["Basic Pay (₹) ✏️▾"] + date_cols
@@ -803,8 +843,10 @@ elif selected_tab == nav_options[1]:
                 col_cfg = {col: st.column_config.CheckboxColumn(width="small") for col in date_cols}
                 col_cfg["Basic Pay (₹) ✏️▾"] = st.column_config.SelectboxColumn("Basic Pay (₹) ✏️▾", options=ALL_BASIC_PAYS, required=True, width="medium")
                 
+                editor_key = f"grid_{m}_{y}_{st.session_state.get(ed_key_var, 0)}"
+                
                 edited_display_df = st.data_editor(
-                    display_df, key=f"editor_{m}_{y}", hide_index=False, use_container_width=True,
+                    display_df, key=editor_key, hide_index=False, use_container_width=True,
                     column_config=col_cfg, height=200 + (len(display_df) * 35)
                 )
                 
@@ -821,7 +863,7 @@ elif selected_tab == nav_options[1]:
                     st.session_state.active_months.append({'m': next_m, 'y': next_y})
                     last_att = st.session_state.att_dict[(last_m, last_y)]
                     for _, row in last_att.iterrows():
-                        st.session_state.emp_db.loc[st.session_state.emp_db["Emp No"] == row["Emp No"], "Basic Pay (₹)"] = row["Basic Pay (₹)"]
+                        st.session_state.emp_db.loc[st.session_state.emp_db["Emp No"].astype(str) == str(row["Emp No"]), "Basic Pay (₹)"] = row["Basic Pay (₹)"]
                     st.rerun()
             with c_del:
                 if st.button("➖ Delete Last Month", type="secondary", use_container_width=True):
@@ -833,6 +875,7 @@ elif selected_tab == nav_options[1]:
                 if st.button("🗑️ Reset Calendar", type="secondary", use_container_width=True):
                     st.session_state.active_months = []
                     st.session_state.att_dict = {}
+                    st.session_state.report_generated = False
                     st.rerun()
 
         st.markdown("<br><hr>", unsafe_allow_html=True)
@@ -892,16 +935,20 @@ elif selected_tab == nav_options[2]:
                 
                 period_str = f"{get_month_name(st.session_state.active_months[0]['m'], st.session_state.active_months[0]['y'])} to {get_month_name(st.session_state.active_months[-1]['m'], st.session_state.active_months[-1]['y'])}"
                 
-                st.markdown("---")
-                st.markdown("### Grand Final Summary")
-                st.dataframe(final_bill, use_container_width=True, hide_index=True)
-                
-                excel_data = generate_dynamic_excel(st.session_state.ministry, st.session_state.department, st.session_state.office, period_str, st.session_state.active_months, st.session_state.att_dict, edited_da_df, final_bill, logs_df, night_hours_per_duty, month_cols)
-                pdf_bytes = generate_official_pdf(st.session_state.ministry, st.session_state.department, st.session_state.office, period_str, st.session_state.active_months, st.session_state.att_dict, edited_da_df, final_bill, logs_df, night_hours_per_duty, month_cols)
-                word_bytes = generate_word_html(st.session_state.ministry, st.session_state.department, st.session_state.office, period_str, st.session_state.active_months, st.session_state.att_dict, edited_da_df, final_bill, logs_df, night_hours_per_duty, month_cols)
-                
-                st.markdown("<br>", unsafe_allow_html=True)
-                c1, c2, c3 = st.columns(3)
-                with c1: st.download_button("📥 Interactive Excel (.xlsx)", data=excel_data, file_name=f"Dynamic_NDA_{period_str}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
-                with c2: st.markdown(f'<a href="data:application/pdf;base64,{base64.b64encode(pdf_bytes).decode()}" download="NDA_{period_str}.pdf" style="text-decoration:none; padding:10px; background-color:#EF4444; color:white; border-radius:5px; display:block; text-align:center; font-weight:bold;">📄 Official PDF</a>', unsafe_allow_html=True)
-                with c3: st.markdown(f'<a href="data:application/msword;base64,{base64.b64encode(word_bytes).decode()}" download="NDA_{period_str}.doc" style="text-decoration:none; padding:10px; background-color:#2563EB; color:white; border-radius:5px; display:block; text-align:center; font-weight:bold;">📝 Editable Word (.doc)</a>', unsafe_allow_html=True)
+                st.session_state.final_bill_df = final_bill
+                st.session_state.period_str = period_str
+                st.session_state.excel_data = generate_dynamic_excel(st.session_state.ministry, st.session_state.department, st.session_state.office, period_str, st.session_state.active_months, st.session_state.att_dict, edited_da_df, final_bill, logs_df, night_hours_per_duty, month_cols)
+                st.session_state.pdf_bytes = generate_official_pdf(st.session_state.ministry, st.session_state.department, st.session_state.office, period_str, st.session_state.active_months, st.session_state.att_dict, edited_da_df, final_bill, logs_df, night_hours_per_duty, month_cols)
+                st.session_state.word_bytes = generate_word_html(st.session_state.ministry, st.session_state.department, st.session_state.office, period_str, st.session_state.active_months, st.session_state.att_dict, edited_da_df, final_bill, logs_df, night_hours_per_duty, month_cols)
+                st.session_state.report_generated = True
+
+        if st.session_state.get('report_generated', False):
+            st.markdown("---")
+            st.markdown("### Grand Final Summary")
+            st.dataframe(st.session_state.final_bill_df, use_container_width=True, hide_index=True)
+            
+            st.markdown("### 📥 Download Center")
+            c1, c2, c3 = st.columns(3)
+            with c1: st.download_button("📊 Download CleanReport (.xlsx)", data=st.session_state.excel_data, file_name=f"CleanReport_NDA_{st.session_state.period_str}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
+            with c2: st.download_button("📄 Download CleanReport (.pdf)", data=st.session_state.pdf_bytes, file_name=f"CleanReport_NDA_{st.session_state.period_str}.pdf", mime="application/pdf", use_container_width=True)
+            with c3: st.download_button("📝 Download CleanReport (.doc)", data=st.session_state.word_bytes, file_name=f"CleanReport_NDA_{st.session_state.period_str}.doc", mime="application/msword", use_container_width=True)
