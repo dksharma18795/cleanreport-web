@@ -32,7 +32,7 @@ hide_st_style = """
     
     .stApp { background-color: #F8FAFC; }
     h1, h2, h3 { color: #1E293B; font-family: 'Inter', sans-serif; }
-    .stButton>button { border-radius: 8px; font-weight: 600; transition: all 0.3s ease; }
+    .stButton>button, .stLinkButton>a { border-radius: 8px; font-weight: 600; transition: all 0.3s ease; }
     </style>
 """
 st.markdown(hide_st_style, unsafe_allow_html=True)
@@ -42,7 +42,7 @@ st.title("⚡ Welcome to CleanReport Workspace")
 st.markdown("Your centralized professional portal for Data Analytics and Government Calculations.")
 st.markdown("---")
 
-# 🔥 CHANGED: Back to 3 columns
+# 3 columns layout
 col1, col2, col3 = st.columns(3, gap="large")
 
 with col1:
@@ -67,7 +67,7 @@ with col2:
     if st.button("🚀 Launch Medical Calculator", use_container_width=True, type="primary"):
         st.switch_page("pages/2_Medical_Reimbursement.py")
 
-# 🔥 CHANGED: 3rd Card is now NDA Calculator
+# 🔥 3rd Card: Linked to new React Vercel App
 with col3:
     st.markdown("""
         <div style="background-color: #FFFFFF; padding: 25px; border-radius: 12px; border: 1px solid #E2E8F0; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.02); height: 210px;">
@@ -76,5 +76,5 @@ with col3:
         </div>
         <br>
     """, unsafe_allow_html=True)
-    if st.button("🚀 Launch NDA (Night Duty Allowance) Calculator", use_container_width=True, type="primary"):
-        st.switch_page("pages/3_NDA_Calculator.py")
+    # Using link_button to redirect to the new external SaaS app
+    st.link_button("🚀 Launch NDA (Night Duty Allowance) Calculator", "https://nda-frontend-five.vercel.app", use_container_width=True, type="primary")
